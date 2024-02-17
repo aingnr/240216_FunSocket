@@ -1,4 +1,4 @@
-#1st!zzz
+#process_data 매개변수 수정
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
@@ -8,7 +8,7 @@ from langchain.agents.agent_types import AgentType
 from langchain_experimental.agents.agent_toolkits.csv.base import create_csv_agent
 from langchain_community.vectorstores import Chroma
 from dotenv import load_dotenv
-import pandas as pd
+# import pandas as pd
 import tempfile
 import os
 import json
@@ -23,7 +23,7 @@ model_name = "gpt-3.5-turbo"
 app = FastAPI()
 
 # 정적 파일을 위한 설정
-app.mount("/static", StaticFiles(directory=r"C:\\wiz\\240216_TEST\\StaticFiles"), name="static")
+app.mount("/static", StaticFiles(directory=r"C:\\gitcode\\240216_FunSocket\\StaticFiles"), name="static")
 
 @app.get("/")
 async def get_root():
@@ -56,8 +56,9 @@ async def websocket_endpoint(websocket: WebSocket):
         except WebSocketDisconnect:
             print("WebSocket connection closed")
             break
-
-async def process_data(data):
+        
+#연구 중 ! 위에서 data_dict로 process_data 처리를 하였기 때문에 아래에 그대로 적용 함.
+async def process_data(data_dict):
     # ChatGPT 인스턴스 생성
     chatgpt = ChatOpenAI(
             openai_api_key=openai_api_key, 
@@ -71,7 +72,7 @@ async def process_data(data):
     embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
     vectordb = Chroma(persist_directory="chroma\\0129_malcang1\\0129_mal", embedding_function=embeddings)
 
-    question = ", ".join(data.values())
+    question = ", ".join(data_dict.values())
 
     # 문서 검색 및 처리
     try:
