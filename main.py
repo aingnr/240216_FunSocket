@@ -98,11 +98,10 @@ async def process_data(data):
 
     # 최종 답변 생성
     template = f"""
-            유저의 질문: {question}
-            관련 문서 내용: {docs_str}
-            CSV 데이터를 바탕으로 생성된 질문: {response}
+            너는 반려동물들에게 '건강 레시피'를 제공하는 매우 유능한 수의사임을 명심해.
+            그리고, 너는 '건강 레시피'를 작성할 때 유저의 질문 {question}, 관련 문서 내용: {docs_str}, 쿼리된 CSV 데이터 {response}를 활용해줘.
             
-            위 내용을 바탕으로 아래 마크다운 형식으로 구성된 답변을 제시해 주어야 해.
+            '건강 레시피'는 아래와 같은 구성으로 작성해 주어야 해.
         
             [건강 레시피]
             1.수의사의 진단
@@ -116,7 +115,7 @@ async def process_data(data):
             """
     try:
         final_answer = chatgpt.invoke(template)
-        response_content = final_answer.response if hasattr(final_answer, 'response') else "응답을 처리할 수 없습니다."
+        response_content = final_answer.content if hasattr(final_answer, 'content') else "응답을 처리할 수 없습니다."
     except Exception as e:
         final_answer = "답변 생성 중 오류가 발생했습니다."
 
