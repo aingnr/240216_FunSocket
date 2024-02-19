@@ -1,4 +1,3 @@
-#1st!zzz
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
@@ -16,18 +15,18 @@ import json
 # 환경 변수 로드
 load_dotenv()
 
-# OpenAI API 키 환경 변수에서 검색
+# 환경 변수에서 OpenAI API 키 가져오기
 openai_api_key = os.getenv('OPENAI_API_KEY')
 model_name = "gpt-3.5-turbo"
 
 app = FastAPI()
 
-# 정적 파일을 위한 설정
-app.mount("/static", StaticFiles(directory=r"C:\\wiz\\240216_TEST\\StaticFiles"), name="static")
+# 정적 파일 설정
+app.mount("/static", StaticFiles(directory="C:\\gitcode\\240216_FunSocket\\StaticFiles"), name="static")
 
 @app.get("/")
 async def get_root():
-    # HTML 반환
+    # 루트 엔드포인트에 대한 HTML 반환
     return HTMLResponse("""
     <html>
         <head>
@@ -44,78 +43,61 @@ async def get_root():
     </html>
     """)
 
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    while True:
-        try:
-            data = await websocket.receive_text()
-            data_dict = json.loads(data)  # 받은 데이터를 JSON 객체로 변환
-            response_text = await process_data(data_dict)  # 사용자 입력 처리
-            await websocket.send_text(response_text)  # 처리 결과를 클라이언트에 전송
-        except WebSocketDisconnect:
-            print("WebSocket connection closed")
-            break
-
-async def process_data(data):
-    # ChatGPT 인스턴스 생성
-    chatgpt = ChatOpenAI(
-            openai_api_key=openai_api_key, 
+class ChatApplication:
+    def __init__(self, openai_api_key, model_name):
+        self.openai_api_key = openai_api_key
+        self.model_name = model_name
+        self.chatgpt = ChatOpenAI(
+            openai_api_key=openai_api_key,
             model=model_name,
             streaming=True,
             callbacks=[StreamingStdOutCallbackHandler()],
             temperature=0
         )
+        self.embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
 
-    # 임베딩 및 벡터 데이터베이스 설정
-    embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
-    vectordb = Chroma(persist_directory="chroma\\0129_malcang1\\0129_mal", embedding_function=embeddings)
+    async def process_data(self, data_dict):
+        question = ", ".join(data_dict.values())
+        vectordb = Chroma(persist_directory="chroma\\0129_malcang1\\0129_mal", embedding_function=self.embeddings)
 
-    question = ", ".join(data.values())
+        try:
+            docs = vectordb.similarity_search(question)
+            docs_str = docs[0].page_content if docs else "There are no related documents."
+        except Exception:
+            docs_str = "An error occurred while searching."
 
-    # 문서 검색 및 처리
-    try:
-        docs = vectordb.similarity_search(question)
-        docs_str = docs[0].page_content if docs else "관련 문서가 없습니다."
-    except Exception as e:
-        docs_str = "검색 중 오류가 발생했습니다."
+        file_path = '0129_dog.csv'
+        df = pd.read_csv(file_path, encoding='utf-8' if os.path.exists(file_path) else 'cp949')
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
+        df.to_csv(temp_file.name, index=False)
 
-    # CSV 파일 처리
-    file_path = '0129_dog.csv'
-
-    df = pd.read_csv(file_path, encoding='utf-8' if os.path.exists(file_path) else 'cp949')
-
-    # 임시 파일 생성
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
-    df.to_csv(temp_file.name, index=False)
-
-    # 에이전트 생성 및 질문 처리
-    try:
-        agent = create_csv_agent(chatgpt, temp_file.name, agent_type=AgentType.OPENAI_FUNCTIONS)
-        response = agent.invoke(question + "내용에 적합한 '제품 이름' 2개를 '제품 특성' 기준으로 추천해줘")
-    except Exception as e:
-        response = "질문 처리 중 오류가 발생했습니다."
+        try:
+            agent = create_csv_agent(self.chatgpt, temp_file.name, agent_type=AgentType.OPENAI_FUNCTIONS)
+            response = agent.invoke(question + " 내용에 적합한 '제품 이름' 2개를 '제품 특성' 기준으로 추천해줘.")
+        except Exception:
+            response = "An error occurred while processing your question."
 
     # 최종 답변 생성
     template = f"""
-            너는 반려동물들에게 '건강 레시피'를 제공하는 매우 유능한 수의사임을 명심해.
-            그리고, 너는 '건강 레시피'를 작성할 때 유저의 질문 {question}, 관련 문서 내용: {docs_str}, 쿼리된 CSV 데이터 {response}를 활용해줘.
+            유저의 질문: {question}
+            관련 문서 내용: {docs_str}
+            CSV 데이터를 바탕으로 생성된 질문: {response}
             
-            '건강 레시피'는 아래와 같은 구성으로 작성해 주어야 해.
+            위 내용을 바탕으로 아래 마크다운 형식으로 구성된 답변을 제시해 주어야 해.
         
-            [건강 레시피]
-            1.수의사의 진단
-            2.집에서 할 수 있는 케어 프로그램
-            3.추천 영양성분
-            4.추천 사료 제품
-            5.맺음말
+            [Healthy Recipe]
+            1. Veterinarian’s diagnosis
+            2. Care program that can be done at home
+            3. Recommended nutritional ingredients
+            4. Recommended feed products
+            5. Conclusion
         
-            위에서 '4.추천 사료 제품'은 {response} 내용 중 '제품 이름'과 '제품 특성'을 반드시 적용해 주어야 해.
-            이때, 추천된 2개 제품은 1), 2) 형식으로 내용을 표현해줘.
+            For '4. Recommended feed products' above, 'Product Name' and 'Product Characteristics' in the {response} content must be applied.
+            At this time, please express the contents of the two recommended products in the format 1) and 2).
             """
     try:
         final_answer = chatgpt.invoke(template)
-        response_content = final_answer.content if hasattr(final_answer, 'content') else "응답을 처리할 수 없습니다."
+        response_content = final_answer.response if hasattr(final_answer, 'response') else "응답을 처리할 수 없습니다."
     except Exception as e:
         final_answer = "답변 생성 중 오류가 발생했습니다."
 
@@ -130,4 +112,4 @@ async def process_data(data):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host="127.0.0.1/", port=8000, reload=True)
